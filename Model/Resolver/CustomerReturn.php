@@ -25,6 +25,7 @@ use Magento\Framework\Exception\NoSuchEntityException;
 class CustomerReturn implements ResolverInterface
 {
     use CustomerRmaAccessTrait;
+    use ReturnQueryTrait;
 
     /**
      * @param RMARepositoryInterface $rmaRepository
@@ -51,6 +52,6 @@ class CustomerReturn implements ResolverInterface
     {
         $rma = $this->loadCustomerRma($context, (int)($args['rma_id'] ?? 0));
 
-        return $this->returnDataProvider->formatRma($rma);
+        return $this->returnDataProvider->formatRma($rma, $this->selectedReturnFields($info));
     }
 }

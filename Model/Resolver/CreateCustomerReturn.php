@@ -28,6 +28,7 @@ use Magento\Framework\GraphQl\Exception\GraphQlNoSuchEntityException;
 class CreateCustomerReturn implements ResolverInterface
 {
     use ReturnInputTrait;
+    use ReturnQueryTrait;
 
     /**
      * @param OrderRepositoryInterface $orderRepository
@@ -101,6 +102,6 @@ class CreateCustomerReturn implements ResolverInterface
             throw new GraphQlInputException(__($e->getMessage()));
         }
 
-        return ['return' => $this->returnDataProvider->formatRma($rma)];
+        return ['return' => $this->returnDataProvider->formatRma($rma, $this->selectedReturnFields($info, 'return'))];
     }
 }

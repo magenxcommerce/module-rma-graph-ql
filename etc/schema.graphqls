@@ -5,29 +5,36 @@
 # Forked from mage-os/module-rma 2.4.1 into Magenx_Rma / Magenx_RmaGraphQl;
 # identifiers renamed, GraphQL surface split into a sibling module.
 # Modified by MagenX: added `customerReturns(sort:)`, the `returnAttributesMetadata` query and its types.
+#
+# Every query below that returns data belonging to one shopper carries
+# `@cache(cacheable: false)`. GraphQL GET requests are otherwise stored in the
+# full page cache, which is keyed on the query — not on the customer token — so a
+# cacheable private query would serve one customer's returns to the next visitor.
+# `returnAttributesMetadata` is deliberately left cacheable: it exposes only public
+# store configuration and is the same for every visitor of a given store.
 
 type Query {
     customerReturns(
         pageSize: Int = 20
         currentPage: Int = 1
         sort: CustomerReturnsSortInput
-    ): CustomerReturnsOutput @resolver(class: "Magenx\\RmaGraphQl\\Model\\Resolver\\CustomerReturns") @doc(description: "List return requests for the logged-in customer.")
+    ): CustomerReturnsOutput @resolver(class: "Magenx\\RmaGraphQl\\Model\\Resolver\\CustomerReturns") @doc(description: "List return requests for the logged-in customer.") @cache(cacheable: false)
 
     customerReturn(
         rma_id: Int!
-    ): CustomerReturn @resolver(class: "Magenx\\RmaGraphQl\\Model\\Resolver\\CustomerReturn") @doc(description: "Get a single return request by ID for the logged-in customer.")
+    ): CustomerReturn @resolver(class: "Magenx\\RmaGraphQl\\Model\\Resolver\\CustomerReturn") @doc(description: "Get a single return request by ID for the logged-in customer.") @cache(cacheable: false)
 
     guestReturn(
         order_number: String!
         email: String!
         rma_id: Int!
-    ): CustomerReturn @resolver(class: "Magenx\\RmaGraphQl\\Model\\Resolver\\GuestReturn") @doc(description: "Get a single return request by ID for a guest order.")
+    ): CustomerReturn @resolver(class: "Magenx\\RmaGraphQl\\Model\\Resolver\\GuestReturn") @doc(description: "Get a single return request by ID for a guest order.") @cache(cacheable: false)
 
     returnComments(
         rma_id: Int!
         pageSize: Int = 50
         currentPage: Int = 1
-    ): ReturnCommentsOutput @resolver(class: "Magenx\\RmaGraphQl\\Model\\Resolver\\ReturnComments") @doc(description: "List comments for a return request (customer-visible only).")
+    ): ReturnCommentsOutput @resolver(class: "Magenx\\RmaGraphQl\\Model\\Resolver\\ReturnComments") @doc(description: "List comments for a return request (customer-visible only).") @cache(cacheable: false)
 
     returnAttributesMetadata: ReturnAttributesMetadata @resolver(class: "Magenx\\RmaGraphQl\\Model\\Resolver\\ReturnAttributesMetadata") @doc(description: "Lists the active reasons, resolution types and item conditions a customer or guest can choose from when creating a return.")
 }

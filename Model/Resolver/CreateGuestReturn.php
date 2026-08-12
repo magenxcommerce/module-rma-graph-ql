@@ -22,13 +22,13 @@ use Magento\Framework\GraphQl\Schema\Type\ResolveInfo;
 use Magento\Sales\Api\OrderRepositoryInterface;
 use Magento\Framework\GraphQl\Exception\GraphQlAuthorizationException;
 use Magento\Framework\GraphQl\Exception\GraphQlInputException;
-use Magento\Framework\GraphQl\Exception\GraphQlNoSuchEntityException;
 use Magento\Framework\Exception\NoSuchEntityException;
 
 class CreateGuestReturn implements ResolverInterface
 {
     use ReturnInputTrait;
     use GuestOrderLookupTrait;
+    use ReturnQueryTrait;
 
     /**
      * @param OrderRepositoryInterface $orderRepository
@@ -55,7 +55,7 @@ class CreateGuestReturn implements ResolverInterface
      * @return array
      * @throws GraphQlInputException
      * @throws GraphQlAuthorizationException
-     * @throws GraphQlNoSuchEntityException|NoSuchEntityException
+     * @throws NoSuchEntityException
      */
     public function resolve(Field $field, $context, ResolveInfo $info, ?array $value = null, ?array $args = null): array
     {
@@ -68,7 +68,7 @@ class CreateGuestReturn implements ResolverInterface
             'items' => 'Items',
         ]);
 
-        $order = $this->findGuestOrder($input['order_number'], $input['email']);
+        $order = $this->findGuestOrder($input['order_number'], $input['email'], $this->resolveStoreId($context));
 
         if (!$this->orderEligibility->isOrderEligible($order)) {
             throw new GraphQlInputException(__('This order is not eligible for a return.'));
@@ -90,6 +90,6 @@ class CreateGuestReturn implements ResolverInterface
             throw new GraphQlInputException(__($e->getMessage()));
         }
 
-        return ['return' => $this->returnDataProvider->formatRma($rma)];
+        return ['return' => $this->returnDataProvider->formatRma($rma, $this->selectedReturnFields($info, 'return'))];
     }
 }
