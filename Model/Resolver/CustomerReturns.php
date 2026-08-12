@@ -27,6 +27,8 @@ use Magento\Framework\Exception\NoSuchEntityException;
 
 class CustomerReturns implements ResolverInterface
 {
+    use ReturnQueryTrait;
+
     /**
      * @param RMARepositoryInterface $rmaRepository
      * @param SearchCriteriaBuilder $searchCriteriaBuilder
@@ -87,8 +89,8 @@ class CustomerReturns implements ResolverInterface
         }
 
         $customerId = (int)$context->getUserId();
-        $pageSize = $args['pageSize'] ?? 20;
-        $currentPage = $args['currentPage'] ?? 1;
+        $pageSize = $this->clampPageSize($args['pageSize'] ?? null, 20);
+        $currentPage = max(1, (int)($args['currentPage'] ?? 1));
 
         $searchCriteria = $this->searchCriteriaBuilder
             ->addFilter('customer_id', $customerId)
@@ -101,10 +103,10 @@ class CustomerReturns implements ResolverInterface
 
         $searchResults = $this->rmaRepository->getList($searchCriteria);
 
-        $items = [];
-        foreach ($searchResults->getItems() as $rma) {
-            $items[] = $this->returnDataProvider->formatRma($rma);
-        }
+        $items = $this->returnDataProvider->formatRmaList(
+            $searchResults->getItems(),
+            $this->selectedReturnFields($info, 'items')
+        );
 
         return [
             'items' => $items,

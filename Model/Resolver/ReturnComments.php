@@ -27,6 +27,7 @@ use Magento\Framework\GraphQl\Exception\GraphQlNoSuchEntityException;
 class ReturnComments implements ResolverInterface
 {
     use CustomerRmaAccessTrait;
+    use ReturnQueryTrait;
 
     /**
      * @param RMARepositoryInterface $rmaRepository
@@ -58,8 +59,8 @@ class ReturnComments implements ResolverInterface
         $rmaId = (int)($args['rma_id'] ?? 0);
         $this->loadCustomerRma($context, $rmaId);
 
-        $pageSize = $args['pageSize'] ?? 50;
-        $currentPage = $args['currentPage'] ?? 1;
+        $pageSize = $this->clampPageSize($args['pageSize'] ?? null, 50);
+        $currentPage = max(1, (int)($args['currentPage'] ?? 1));
 
         $sortOrder = $this->sortOrderBuilder
             ->setField('created_at')
