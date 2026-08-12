@@ -26,6 +26,7 @@ use Magento\Sales\Api\OrderRepositoryInterface;
 class GuestReturn implements ResolverInterface
 {
     use GuestOrderLookupTrait;
+    use ReturnQueryTrait;
 
     /**
      * @param RMARepositoryInterface $rmaRepository
@@ -62,7 +63,7 @@ class GuestReturn implements ResolverInterface
             throw new GraphQlInputException(__('Order number, email and RMA ID are required.'));
         }
 
-        $order = $this->findGuestOrder($orderNumber, $email);
+        $order = $this->findGuestOrder($orderNumber, $email, $this->resolveStoreId($context));
 
         try {
             $rma = $this->rmaRepository->get($rmaId);
@@ -74,6 +75,6 @@ class GuestReturn implements ResolverInterface
             throw new GraphQlAuthorizationException(__('You are not authorized to view this return.'));
         }
 
-        return $this->returnDataProvider->formatRma($rma);
+        return $this->returnDataProvider->formatRma($rma, $this->selectedReturnFields($info));
     }
 }
