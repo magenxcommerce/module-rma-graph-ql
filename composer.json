@@ -1,6 +1,7 @@
 {
     "name": "magenxcommerce/module-rma-graph-ql",
     "description": "GraphQL coverage for Magenx_Rma: customer + guest return lookup, return creation, comments, and the return-attribute metadata the headless create-return form needs.",
+    "version": "1.0.1",
     "config": {
         "sort-packages": true
     },
