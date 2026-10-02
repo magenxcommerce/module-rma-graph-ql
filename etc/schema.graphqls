@@ -5,6 +5,7 @@
 # Forked from mage-os/module-rma 2.4.1 into Magenx_Rma / Magenx_RmaGraphQl;
 # identifiers renamed, GraphQL surface split into a sibling module.
 # Modified by MagenX: added `customerReturns(sort:)`, the `returnAttributesMetadata` query and its types.
+# Modified by MagenX: added the EU withdrawal query and mutation, and the withdrawal fields on CustomerReturn.
 #
 # Every query below that returns data belonging to one shopper carries
 # `@cache(cacheable: false)`. GraphQL GET requests are otherwise stored in the
@@ -30,6 +31,11 @@ type Query {
         rma_id: Int!
     ): CustomerReturn @resolver(class: "Magenx\\RmaGraphQl\\Model\\Resolver\\GuestReturn") @doc(description: "Get a single return request by ID for a guest order.") @cache(cacheable: false)
 
+    withdrawalOrder(
+        order_number: String! @doc(description: "The order increment ID.")
+        email: String! @doc(description: "The email address on the order. Not needed to match when the logged-in customer placed the order.")
+    ): WithdrawalOrder @resolver(class: "Magenx\\RmaGraphQl\\Model\\Resolver\\WithdrawalOrder") @doc(description: "The lines of an order a consumer can still withdraw from (EU right of withdrawal). Open to guests and to registered customers who are not logged in.") @cache(cacheable: false)
+
     returnComments(
         rma_id: Int!
         pageSize: Int = 50
@@ -51,6 +57,10 @@ type Mutation {
     addReturnComment(
         input: AddReturnCommentInput!
     ): ReturnComment @resolver(class: "Magenx\\RmaGraphQl\\Model\\Resolver\\AddReturnComment") @doc(description: "Add a comment to a return request.")
+
+    submitWithdrawal(
+        input: SubmitWithdrawalInput!
+    ): SubmitWithdrawalOutput @resolver(class: "Magenx\\RmaGraphQl\\Model\\Resolver\\SubmitWithdrawal") @doc(description: "Declare withdrawal from an order (EU right of withdrawal). Records the declaration and emails a confirmation, then opens a withdrawal return for shipped items or cancels an order that has not shipped. Open to guests.")
 }
 
 type CustomerReturn {
@@ -64,6 +74,11 @@ type CustomerReturn {
     comments: [ReturnComment] @doc(description: "Customer-visible comments.")
     created_at: String @doc(description: "Creation date.")
     updated_at: String @doc(description: "Last update date.")
+    is_withdrawal: Boolean @doc(description: "True when the return was opened from a withdrawal declaration.")
+    withdrawal_declared_at: String @doc(description: "When the withdrawal declaration was received (UTC), for withdrawal returns.")
+    helpdesk_ticket_code: String @doc(description: "The support ticket that records the withdrawal declaration.")
+    return_carrier: String @doc(description: "Carrier of the return shipment, once known.")
+    return_tracking_number: String @doc(description: "Tracking number of the return shipment, once known.")
 }
 
 type ReturnItem {
@@ -147,4 +162,38 @@ input CreateReturnItemInput {
 input AddReturnCommentInput {
     rma_id: Int! @doc(description: "The RMA entity ID.")
     comment: String! @doc(description: "Comment text.")
+}
+
+type WithdrawalOrder @doc(description: "An order as offered on the withdrawal form.") {
+    order_number: String @doc(description: "The order increment ID.")
+    can_submit: Boolean @doc(description: "Whether submitWithdrawal is available on this store. When false, the storefront should offer its fallback (e.g. a contact form).")
+    items: [WithdrawalOrderItem] @doc(description: "Every returnable line of the order, including lines with nothing left to withdraw from.")
+}
+
+type WithdrawalOrderItem @doc(description: "One order line on the withdrawal form.") {
+    order_item_id: Int @doc(description: "The order item ID, to send back in SubmitWithdrawalInput.")
+    name: String @doc(description: "Product name.")
+    sku: String @doc(description: "Product SKU.")
+    qty_withdrawable: Int @doc(description: "Quantity that can still be withdrawn from: shipped and not returned or refunded, plus not shipped yet.")
+    qty_unshipped: Int @doc(description: "Part of qty_withdrawable that has not shipped yet.")
+}
+
+input SubmitWithdrawalInput @doc(description: "A withdrawal declaration.") {
+    order_number: String! @doc(description: "The order increment ID.")
+    email: String! @doc(description: "The email address on the order. Not needed to match when the logged-in customer placed the order. The confirmation is sent to the order's address.")
+    name: String! @doc(description: "The declarant's name.")
+    items: [WithdrawalItemInput!] @doc(description: "The lines and quantities withdrawn from. Omit or leave empty to withdraw from the whole order.")
+    message: String @doc(description: "Optional free text, at most 2000 characters.")
+}
+
+input WithdrawalItemInput {
+    order_item_id: Int! @doc(description: "The order item ID, from withdrawalOrder.")
+    qty: Int! @doc(description: "Quantity withdrawn from.")
+}
+
+type SubmitWithdrawalOutput @doc(description: "The recorded declaration.") {
+    ticket_code: String @doc(description: "Reference of the recorded declaration, to quote to customer service.")
+    received_at: String @doc(description: "When the declaration was received (UTC, Y-m-d H:i:s).")
+    return_number: String @doc(description: "Increment ID of the withdrawal return opened for shipped items, when one was opened.")
+    order_canceled: Boolean @doc(description: "True when the order had not shipped and was canceled.")
 }

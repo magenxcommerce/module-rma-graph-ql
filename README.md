@@ -65,11 +65,12 @@ in `<CreateReturnForm>`); the `sort` argument fails the whole document.
 
 ## Storefront wiring
 
-All seven operations are client-run from the Next.js storefront, so each is
+The seven return operations are client-run from the Next.js storefront, so each is
 mirrored in the `/api/graphql` persisted-query allowlist
 (`apps/theme/src/app/api/graphql/_lib/allowed-operations.ts`). Documents live in
 `packages/engine/src/magento/queries/returns.ts`, types in
-`packages/engine/src/magento/types/returns.ts`.
+`packages/engine/src/magento/types/returns.ts`. `withdrawalOrder` and
+`submitWithdrawal` are not wired into the storefront yet.
 
 Note the resolvers throw on error (there is no structured `errorV2` on the
 create/comment mutations), so callers handle failures with try/catch rather than
@@ -179,6 +180,25 @@ query {
 }
 ```
 
+#### withdrawalOrder
+
+The lines of an order a consumer can still withdraw from (EU right of
+withdrawal), for the withdrawal form. Reaches guest **and** registered-customer
+orders: the caller proves the order with its number plus the order's email, or
+by being the logged-in customer who placed it. Every miss returns the same
+error. `can_submit: false` means no declaration recorder is installed (see
+below) — keep the fallback form.
+
+```graphql
+query {
+    withdrawalOrder(order_number: "000000001", email: "guest@example.com") {
+        order_number
+        can_submit
+        items { order_item_id name sku qty_withdrawable qty_unshipped }
+    }
+}
+```
+
 #### returnComments
 
 Returns a paginated list of customer-visible comments for a return. Requires customer token.
@@ -247,6 +267,37 @@ mutation {
 }
 ```
 
+#### submitWithdrawal
+
+Declares withdrawal from an order, for selected lines or (no `items`) the whole
+order. Server-side, in one flow (`Magenx\Rma\Service\WithdrawalSubmitService`):
+
+1. the declaration is recorded and confirmed by email through
+   `Magenx\Rma\Api\WithdrawalDeclarationRecorderInterface` — implemented by
+   the helpdesk module; **until one is installed the mutation fails with
+   "Withdrawal declarations are not available."**;
+2. shipped qty goes on a withdrawal RMA; an order with nothing shipped is
+   canceled; anything else is left for staff review.
+
+Only step 1 can fail the call. The confirmation goes to the order's email.
+
+```graphql
+mutation {
+    submitWithdrawal(input: {
+        order_number: "000000001"
+        email: "guest@example.com"
+        name: "Jane Smith"
+        items: [{ order_item_id: 10, qty: 1 }]
+        message: "Optional"
+    }) {
+        ticket_code
+        received_at
+        return_number
+        order_canceled
+    }
+}
+```
+
 #### addReturnComment
 
 Adds a comment to a return. Requires customer token.
@@ -274,6 +325,7 @@ mutation {
 | `createCustomerReturn` | Customer token — ownership of the order is verified |
 | `guestReturn`, `createGuestReturn` | No token — authenticated by `order_number` + `email` |
 | `returnAttributesMetadata` | No token — public store configuration |
+| `withdrawalOrder`, `submitWithdrawal` | No token — `order_number` + order email, or the customer token of the order's owner. Turnstile-protect both at the storefront proxy |
 
 ### Types
 

@@ -8,6 +8,7 @@
  * identifiers renamed, GraphQL surface split into a sibling module.
  * Modified by MagenX: added batch formatting and field-selection awareness so a list
  * of returns costs a fixed number of queries instead of three per row.
+ * Modified by MagenX: exposes the withdrawal and return-shipment fields.
  */
 declare(strict_types=1);
 
@@ -114,6 +115,11 @@ class ReturnDataProvider
                 'comments' => $commentsByRma[$rmaId] ?? [],
                 'created_at' => $rma->getCreatedAt(),
                 'updated_at' => $rma->getUpdatedAt(),
+                'is_withdrawal' => $rma->isWithdrawal(),
+                'withdrawal_declared_at' => $rma->getWithdrawalDeclaredAt(),
+                'helpdesk_ticket_code' => $rma->getHelpdeskTicketCode(),
+                'return_carrier' => $rma->getReturnCarrier(),
+                'return_tracking_number' => $rma->getReturnTrackingNumber(),
             ];
         }
 

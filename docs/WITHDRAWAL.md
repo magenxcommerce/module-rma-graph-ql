@@ -1,6 +1,6 @@
 # Right of withdrawal (EU) — GraphQL side
 
-Status: **plan**. The full analysis, blocker list and work plan live in
+Status: **W9–W11 implemented** on `claude/withdrawal-support`. The full analysis, blocker list and work plan live in
 `magenxcommerce/module-rma` → `docs/WITHDRAWAL.md` (branch
 `claude/withdrawal-support`). This file lists only what lands in this module.
 
@@ -18,16 +18,26 @@ Status: **plan**. The full analysis, blocker list and work plan live in
 
 ## Work items
 
-- **W9** Extend `CustomerReturn` with `is_withdrawal`, `helpdesk_ticket_code`,
+- **W9** (done) Extend `CustomerReturn` with `is_withdrawal`, `helpdesk_ticket_code`,
   `return_tracking_number`, `return_carrier` (after the `Magenx_Rma` schema
   change W2).
-- **W10** Query `withdrawalOrderItems(order_number: String!, email: String!)`
-  returning per item `order_item_id`, `name`, `sku`, `qty_withdrawable`,
-  `qty_unshipped`. Finds guest **and** registered-customer orders, returns data
-  only when the order email matches, one generic error for every miss,
-  `@cache(cacheable: false)`. Turnstile-protected at the storefront proxy.
-- **W11** No public "create withdrawal RMA" mutation here. The single submit
-  mutation lives with the helpdesk/withdrawal module: it creates the ticket,
-  then calls `Magenx\Rma\Service\WithdrawalService::submit()` server-side.
+- **W10** (done) Query `withdrawalOrder(order_number, email)` →
+  `order_number`, `can_submit`, `items { order_item_id name sku
+  qty_withdrawable qty_unshipped }`. Finds guest **and** registered-customer
+  orders in the request's store; accepts the order email (case-insensitive) or
+  the logged-in owner; one generic error for every miss;
+  `@cache(cacheable: false)`. `Model/Resolver/WithdrawalOrderLookupTrait.php`.
+- **W11** (done) Mutation `submitWithdrawal(input: {order_number, email, name,
+  items?, message?})` → `ticket_code`, `received_at`, `return_number`,
+  `order_canceled`. Thin resolver over `Magenx\Rma\Service\WithdrawalSubmitService`,
+  which records the declaration through
+  `Magenx\Rma\Api\WithdrawalDeclarationRecorderInterface` and then calls
+  `WithdrawalService::submit()`. The default recorder is "unavailable", so the
+  mutation is off until the helpdesk module provides one. Review reasons are
+  not exposed; staff see them on the RMA.
+- Storefront: add both operations to the `/api/graphql` allowlist and
+  Turnstile (`withdrawal` action), like `CreateHelpdeskGuestTicket`.
+- Requires the `Magenx_Rma` changes on the same branch (no version constraint
+  can express that until both are released).
 - Keep existing return error messages unchanged; branch on
   `OrderEligibility::explain()` (W3) only in new code.
