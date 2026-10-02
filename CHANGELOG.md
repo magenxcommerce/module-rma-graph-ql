@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/magenxcommerce/module-rma-graph-ql/compare/v1.1.0...v1.1.1) (2026-10-02)
+
+
+### Bug Fixes
+
+* Fix description formatting in composer.json ([#11](https://github.com/magenxcommerce/module-rma-graph-ql/issues/11)) ([5a883fa](https://github.com/magenxcommerce/module-rma-graph-ql/commit/5a883fad830f6ca26858f184d51de69b2dcc7a55))
+
 ## [1.1.0](https://github.com/magenxcommerce/module-rma-graph-ql/compare/v1.0.1...v1.1.0) (2026-10-02)
 
 
