@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/magenxcommerce/module-rma-graph-ql/compare/v1.0.1...v1.1.0) (2026-10-02)
+
+
+### Features
+
+* withdrawalOrder query and submitWithdrawal mutation ([#8](https://github.com/magenxcommerce/module-rma-graph-ql/issues/8)) ([79e41a0](https://github.com/magenxcommerce/module-rma-graph-ql/commit/79e41a05cd5301776c0eeac9d3798be8f0014d16))
+
 ## [1.0.1](https://github.com/magenxcommerce/module-rma-graph-ql/compare/v1.0.0...v1.0.1) (2026-08-12)
 
 
