@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/magenxcommerce/module-rma-graph-ql/compare/v1.1.1...v1.1.2) (2026-11-01)
+
+
+### Bug Fixes
+
+* require PHP 8.4 or newer ([#13](https://github.com/magenxcommerce/module-rma-graph-ql/issues/13)) ([c95e306](https://github.com/magenxcommerce/module-rma-graph-ql/commit/c95e3061729e9cdf6ef27818b899d68629da38dd))
+
 ## [1.1.1](https://github.com/magenxcommerce/module-rma-graph-ql/compare/v1.1.0...v1.1.1) (2026-10-02)
 
 
