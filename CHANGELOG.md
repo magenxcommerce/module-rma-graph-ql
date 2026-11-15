@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.3](https://github.com/magenxcommerce/module-rma-graph-ql/compare/v1.1.2...v1.1.3) (2026-11-15)
+
+
+### Bug Fixes
+
+* Refund rule (spec gap 1) ([#15](https://github.com/magenxcommerce/module-rma-graph-ql/issues/15)) ([f773a8d](https://github.com/magenxcommerce/module-rma-graph-ql/commit/f773a8d6d0fea9d5eceabc5de973df5ffed89e06))
+
 ## [1.1.2](https://github.com/magenxcommerce/module-rma-graph-ql/compare/v1.1.1...v1.1.2) (2026-11-01)
 
 
