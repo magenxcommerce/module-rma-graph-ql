@@ -6,12 +6,13 @@
     },
     "require": {
         "php": "~8.4.0||~8.5.0",
-        "magenxcommerce/module-rma": "*",
         "magento/framework": "*",
         "magento/module-customer": "*",
+        "magento/module-customer-graph-ql": "*",
         "magento/module-graph-ql": "*",
         "magento/module-sales": "*",
-        "magento/module-store": "*"
+        "magento/module-store-graph-ql": "*",
+        "magenxcommerce/module-rma": "*"
     },
     "type": "magento2-module",
     "license": [
