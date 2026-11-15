@@ -8,13 +8,16 @@
  * identifiers renamed, GraphQL surface split into a sibling module.
  * Modified by MagenX: storage errors are not shown to the client;
  * answers "not available" while returns are off for the store;
- * someone else's return or order answers like a missing one.
+ * someone else's return or order answers like a missing one; closed returns take no
+ * comments and a comment is at most 2000 characters.
  */
 declare(strict_types=1);
 
 namespace Magenx\RmaGraphQl\Model\Resolver;
 
 use Magenx\Rma\Helper\ModuleConfig;
+use Magenx\Rma\Model\RMA\StatusCodes;
+use Magenx\Rma\Model\RMA\StatusResolver;
 use Magenx\Rma\Api\CommentRepositoryInterface;
 use Magenx\Rma\Api\Data\CommentInterface;
 use Magenx\Rma\Api\Data\CommentInterfaceFactory;
@@ -35,19 +38,23 @@ class AddReturnComment implements ResolverInterface
     use ReturnsAvailabilityTrait;
     use ReturnInputTrait;
 
+    private const MAX_COMMENT_LENGTH = 2000;
+
     /**
      * @param RMARepositoryInterface $rmaRepository
      * @param CommentRepositoryInterface $commentRepository
      * @param CommentInterfaceFactory $commentFactory
      * @param CustomerRepositoryInterface $customerRepository
      * @param ModuleConfig $moduleConfig
+     * @param StatusResolver $statusResolver
      */
     public function __construct(
         protected readonly RMARepositoryInterface $rmaRepository,
         protected readonly CommentRepositoryInterface $commentRepository,
         protected readonly CommentInterfaceFactory $commentFactory,
         protected readonly CustomerRepositoryInterface $customerRepository,
-        protected readonly ModuleConfig $moduleConfig
+        protected readonly ModuleConfig $moduleConfig,
+        protected readonly StatusResolver $statusResolver
     ) {
     }
 
@@ -80,6 +87,11 @@ class AddReturnComment implements ResolverInterface
         if ($commentText === '') {
             throw new GraphQlInputException(__('Comment text is required.'));
         }
+        if (mb_strlen($commentText) > self::MAX_COMMENT_LENGTH) {
+            throw new GraphQlInputException(
+                __('The text can be at most %1 characters long.', self::MAX_COMMENT_LENGTH)
+            );
+        }
 
         try {
             $rma = $this->rmaRepository->get($rmaId);
@@ -91,6 +103,11 @@ class AddReturnComment implements ResolverInterface
         if ((int)$rma->getCustomerId() !== $customerId) {
             // Someone else's return answers exactly like a missing one (API PRD BR-3).
             throw new GraphQlNoSuchEntityException(__('RMA with ID "%1" does not exist.', $rmaId));
+        }
+
+        // Messages are for open returns only (API PRD F4).
+        if (in_array($this->statusResolver->getCodeById($rma->getStatusId()), StatusCodes::FINAL_CODES, true)) {
+            throw new GraphQlInputException(__('This return is closed. Contact us if you need help with it.'));
         }
 
         $authorName = $this->getCustomerName($customerId);
