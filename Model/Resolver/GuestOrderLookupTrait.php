@@ -32,6 +32,9 @@ trait GuestOrderLookupTrait
      * - a constant-time e-mail comparison, with the same error for "no such order" and
      *   "wrong e-mail", so the query cannot be used to enumerate valid order numbers.
      *
+     * Calls are rate-limited per client and per email, and refusals are logged as a
+     * count; the class needs a GuestRateLimiter as $this->guestRateLimiter.
+     *
      * @param string $orderNumber
      * @param string $email
      * @param int|null $storeId
@@ -40,6 +43,8 @@ trait GuestOrderLookupTrait
      */
     protected function findGuestOrder(string $orderNumber, string $email, ?int $storeId = null): OrderInterface
     {
+        $this->guestRateLimiter->assertAllowed('guest_proof', $email);
+
         $this->searchCriteriaBuilder
             ->addFilter('increment_id', $orderNumber)
             ->addFilter('customer_is_guest', 1);
@@ -56,6 +61,7 @@ trait GuestOrderLookupTrait
         $order = reset($orders);
 
         if (!$order || !hash_equals(strtolower((string)$order->getCustomerEmail()), strtolower($email))) {
+            $this->guestRateLimiter->recordRefusedProof($storeId);
             throw new GraphQlAuthorizationException(
                 __('We could not find a guest order matching that order number and email address.')
             );

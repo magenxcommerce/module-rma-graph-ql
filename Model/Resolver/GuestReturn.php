@@ -7,12 +7,13 @@
  * Forked from mage-os/module-rma 2.4.1 into Magenx_Rma / Magenx_RmaGraphQl;
  * identifiers renamed, GraphQL surface split into a sibling module.
  * Modified by MagenX: answers "not available" while returns are off for the store;
- * someone else's return or order answers like a missing one.
+ * someone else's return or order answers like a missing one; guest proof is rate-limited.
  */
 declare(strict_types=1);
 
 namespace Magenx\RmaGraphQl\Model\Resolver;
 
+use Magenx\RmaGraphQl\Model\Security\GuestRateLimiter;
 use Magenx\Rma\Helper\ModuleConfig;
 use Magenx\Rma\Api\RMARepositoryInterface;
 use Magenx\RmaGraphQl\Model\Resolver\DataProvider\ReturnDataProvider;
@@ -38,13 +39,15 @@ class GuestReturn implements ResolverInterface
      * @param SearchCriteriaBuilder $searchCriteriaBuilder
      * @param ReturnDataProvider $returnDataProvider
      * @param ModuleConfig $moduleConfig
+     * @param GuestRateLimiter $guestRateLimiter
      */
     public function __construct(
         protected readonly RMARepositoryInterface $rmaRepository,
         protected readonly OrderRepositoryInterface $orderRepository,
         protected readonly SearchCriteriaBuilder $searchCriteriaBuilder,
         protected readonly ReturnDataProvider $returnDataProvider,
-        protected readonly ModuleConfig $moduleConfig
+        protected readonly ModuleConfig $moduleConfig,
+        protected readonly GuestRateLimiter $guestRateLimiter
     ) {
     }
 

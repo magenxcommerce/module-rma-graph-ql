@@ -7,12 +7,13 @@
  * Forked from mage-os/module-rma 2.4.1 into Magenx_Rma / Magenx_RmaGraphQl;
  * identifiers renamed, GraphQL surface split into a sibling module.
  * Modified by MagenX: an ineligible order is refused with its specific reason; storage
- * errors are not shown to the client.
+ * errors are not shown to the client; guest proof is rate-limited.
  */
 declare(strict_types=1);
 
 namespace Magenx\RmaGraphQl\Model\Resolver;
 
+use Magenx\RmaGraphQl\Model\Security\GuestRateLimiter;
 use Magenx\RmaGraphQl\Model\Resolver\DataProvider\ReturnDataProvider;
 use Magenx\Rma\Service\OrderEligibility;
 use Magenx\Rma\Service\RmaSubmitService;
@@ -37,13 +38,15 @@ class CreateGuestReturn implements ResolverInterface
      * @param OrderEligibility $orderEligibility
      * @param RmaSubmitService $rmaSubmitService
      * @param ReturnDataProvider $returnDataProvider
+     * @param GuestRateLimiter $guestRateLimiter
      */
     public function __construct(
         protected readonly OrderRepositoryInterface $orderRepository,
         protected readonly SearchCriteriaBuilder $searchCriteriaBuilder,
         protected readonly OrderEligibility $orderEligibility,
         protected readonly RmaSubmitService $rmaSubmitService,
-        protected readonly ReturnDataProvider $returnDataProvider
+        protected readonly ReturnDataProvider $returnDataProvider,
+        protected readonly GuestRateLimiter $guestRateLimiter
     ) {
     }
 
