@@ -6,6 +6,7 @@
  *
  * Forked from mage-os/module-rma 2.4.1 into Magenx_Rma / Magenx_RmaGraphQl;
  * identifiers renamed, GraphQL surface split into a sibling module.
+ * Modified by MagenX: storage errors are not shown to the client.
  */
 declare(strict_types=1);
 
@@ -28,6 +29,8 @@ use Magento\GraphQl\Model\Query\ContextInterface;
 
 class AddReturnComment implements ResolverInterface
 {
+    use ReturnInputTrait;
+
     /**
      * @param RMARepositoryInterface $rmaRepository
      * @param CommentRepositoryInterface $commentRepository
@@ -90,11 +93,7 @@ class AddReturnComment implements ResolverInterface
         $comment->setComment($commentText);
         $comment->setIsVisibleToCustomer(true);
 
-        try {
-            $comment = $this->commentRepository->save($comment);
-        } catch (LocalizedException $e) {
-            throw new GraphQlInputException(__($e->getMessage()));
-        }
+        $comment = $this->runWrite(fn() => $this->commentRepository->save($comment));
 
         return [
             'comment_id' => $comment->getEntityId(),

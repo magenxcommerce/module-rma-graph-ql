@@ -6,7 +6,8 @@
  *
  * Forked from mage-os/module-rma 2.4.1 into Magenx_Rma / Magenx_RmaGraphQl;
  * identifiers renamed, GraphQL surface split into a sibling module.
- * Modified by MagenX: an ineligible order is refused with its specific reason.
+ * Modified by MagenX: an ineligible order is refused with its specific reason; storage
+ * errors are not shown to the client.
  */
 declare(strict_types=1);
 
@@ -15,7 +16,6 @@ namespace Magenx\RmaGraphQl\Model\Resolver;
 use Magenx\RmaGraphQl\Model\Resolver\DataProvider\ReturnDataProvider;
 use Magenx\Rma\Service\OrderEligibility;
 use Magenx\Rma\Service\RmaSubmitService;
-use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Exception\NoSuchEntityException;
 use Magento\Framework\GraphQl\Config\Element\Field;
 use Magento\Framework\GraphQl\Query\ResolverInterface;
@@ -87,19 +87,15 @@ class CreateCustomerReturn implements ResolverInterface
 
         $selectedItems = $this->buildSelectedItems($input['items']);
 
-        try {
-            $rma = $this->rmaSubmitService->createRma(
-                $order,
-                $customerId,
-                (string)$order->getCustomerEmail(),
-                (string)($order->getCustomerName() ?: 'Customer'),
-                (int)$input['reason_id'],
-                (int)$input['resolution_type_id'],
-                $selectedItems
-            );
-        } catch (LocalizedException $e) {
-            throw new GraphQlInputException(__($e->getMessage()));
-        }
+        $rma = $this->runWrite(fn() => $this->rmaSubmitService->createRma(
+            $order,
+            $customerId,
+            (string)$order->getCustomerEmail(),
+            (string)($order->getCustomerName() ?: 'Customer'),
+            (int)$input['reason_id'],
+            (int)$input['resolution_type_id'],
+            $selectedItems
+        ));
 
         return ['return' => $this->returnDataProvider->formatRma($rma, $this->selectedReturnFields($info, 'return'))];
     }
