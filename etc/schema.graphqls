@@ -6,6 +6,7 @@
 # identifiers renamed, GraphQL surface split into a sibling module.
 # Modified by MagenX: added `customerReturns(sort:)`, the `returnAttributesMetadata` query and its types.
 # Modified by MagenX: added the EU withdrawal mutation and the withdrawal fields on CustomerReturn.
+# Modified by MagenX: added the returnable-items queries for the create-return form.
 #
 # Every query below that returns data belonging to one shopper carries
 # `@cache(cacheable: false)`. GraphQL GET requests are otherwise stored in the
@@ -32,6 +33,15 @@ type Query {
         email: String!
         rma_id: Int!
     ): CustomerReturn @resolver(class: "Magenx\\RmaGraphQl\\Model\\Resolver\\GuestReturn") @doc(description: "Get a single return request by ID for a guest order.") @cache(cacheable: false)
+
+    customerReturnableItems(
+        order_id: Int! @doc(description: "The order entity ID, as createCustomerReturn takes it.")
+    ): ReturnableItemsOutput @resolver(class: "Magenx\\RmaGraphQl\\Model\\Resolver\\CustomerReturnableItems") @doc(description: "Whether one of the signed-in customer's orders can be returned, and how many units of each line.") @cache(cacheable: false)
+
+    guestReturnableItems(
+        order_number: String!
+        email: String!
+    ): ReturnableItemsOutput @resolver(class: "Magenx\\RmaGraphQl\\Model\\Resolver\\GuestReturnableItems") @doc(description: "Whether a guest order can be returned, and how many units of each line.") @cache(cacheable: false)
 
     returnComments(
         rma_id: Int!
@@ -117,6 +127,19 @@ input CustomerReturnsSortInput @doc(description: "Specifies which field to sort 
 enum CustomerReturnsSortableField @doc(description: "The fields a customer's return requests can be sorted on.") {
     CREATED_AT @doc(description: "Sorts return requests by the date they were created.")
     RMA_ID @doc(description: "Sorts return requests by their RMA id.")
+}
+
+type ReturnableItemsOutput @doc(description: "What the create-return form may offer for one order.") {
+    eligible: Boolean @doc(description: "True when a return can be opened for the order.")
+    reason: String @doc(description: "Why not, in the store language, when eligible is false.")
+    items: [ReturnableItem] @doc(description: "Order lines with units that can still be returned. Empty when not eligible.")
+}
+
+type ReturnableItem @doc(description: "An order line and the units of it the customer can still return.") {
+    order_item_id: Int @doc(description: "The order item ID, as CreateReturnItemInput takes it.")
+    product_name: String @doc(description: "The product name.")
+    product_sku: String @doc(description: "The product SKU.")
+    qty_available: Int @doc(description: "Units that can still be returned: shipped, not refunded or canceled, and not in an open return.")
 }
 
 type CustomerReturnsOutput {
