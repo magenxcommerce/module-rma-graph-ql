@@ -12,7 +12,9 @@
 # full page cache, which is keyed on the query — not on the customer token — so a
 # cacheable private query would serve one customer's returns to the next visitor.
 # `returnAttributesMetadata` is deliberately left cacheable: it exposes only public
-# store configuration and is the same for every visitor of a given store.
+# store configuration and is the same for every visitor of a given store. Its
+# cacheIdentity tags the response (a response without tags is not stored at all);
+# saving or deleting a reason, resolution or condition purges it.
 
 type Query {
     customerReturns(
@@ -37,7 +39,7 @@ type Query {
         currentPage: Int = 1
     ): ReturnCommentsOutput @resolver(class: "Magenx\\RmaGraphQl\\Model\\Resolver\\ReturnComments") @doc(description: "List comments for a return request (customer-visible only).") @cache(cacheable: false)
 
-    returnAttributesMetadata: ReturnAttributesMetadata @resolver(class: "Magenx\\RmaGraphQl\\Model\\Resolver\\ReturnAttributesMetadata") @doc(description: "Lists the active reasons, resolution types and item conditions a customer or guest can choose from when creating a return.")
+    returnAttributesMetadata: ReturnAttributesMetadata @resolver(class: "Magenx\\RmaGraphQl\\Model\\Resolver\\ReturnAttributesMetadata") @cache(cacheIdentity: "Magenx\\RmaGraphQl\\Model\\Resolver\\ReturnAttributesMetadata\\Identity") @doc(description: "Lists the active reasons, resolution types and item conditions a customer or guest can choose from when creating a return.")
 }
 
 type Mutation {
