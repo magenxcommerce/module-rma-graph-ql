@@ -86,6 +86,9 @@ class ReturnDataProvider
         $needsOrder = $this->isSelected($selectedFields, self::ORDER_BACKED_FIELDS);
         $needsItems = $this->isSelected($selectedFields, ['items']);
         $needsComments = $this->isSelected($selectedFields, ['comments']);
+        $needsStatus = $this->isSelected($selectedFields, ['status']);
+        $needsReason = $this->isSelected($selectedFields, ['reason']);
+        $needsResolution = $this->isSelected($selectedFields, ['resolution_type']);
 
         $orders = $needsOrder ? $this->loadOrders($rmas) : [];
         $itemsByRma = $needsItems ? $this->loadItemsByRma($rmaIds) : [];
@@ -102,12 +105,18 @@ class ReturnDataProvider
                 'rma_id' => $rma->getEntityId(),
                 'increment_id' => $rma->getIncrementId(),
                 'order_number' => $order?->getIncrementId(),
-                'status' => $this->labelResolver->resolveAsArray(LabelResolver::TYPE_STATUS, $rma->getStatusId()),
-                'reason' => $this->labelResolver->resolveAsArray(LabelResolver::TYPE_REASON, $rma->getReasonId()),
-                'resolution_type' => $this->labelResolver->resolveAsArray(
-                    LabelResolver::TYPE_RESOLUTION_TYPE,
-                    $rma->getResolutionTypeId()
-                ),
+                'status' => $needsStatus
+                    ? $this->labelResolver->resolveAsArray(LabelResolver::TYPE_STATUS, $rma->getStatusId())
+                    : null,
+                'reason' => $needsReason
+                    ? $this->labelResolver->resolveAsArray(LabelResolver::TYPE_REASON, $rma->getReasonId())
+                    : null,
+                'resolution_type' => $needsResolution
+                    ? $this->labelResolver->resolveAsArray(
+                        LabelResolver::TYPE_RESOLUTION_TYPE,
+                        $rma->getResolutionTypeId()
+                    )
+                    : null,
                 'items' => array_map(
                     fn($item): array => $this->buildItemData($item, $orderItemsMap),
                     $itemsByRma[$rmaId] ?? []
