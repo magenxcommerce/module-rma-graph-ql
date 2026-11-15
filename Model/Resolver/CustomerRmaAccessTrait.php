@@ -31,7 +31,8 @@ trait CustomerRmaAccessTrait
      */
     protected function loadCustomerRma($context, int $rmaId): RMAInterface
     {
-        if ($context->getExtensionAttributes()->getIsCustomer() === false) {
+        // Fail closed: only a signed-in customer with an id passes (API PRD NFR-A2).
+        if ($context->getExtensionAttributes()->getIsCustomer() !== true || !(int)$context->getUserId()) {
             throw new GraphQlAuthorizationException(__('The current customer isn\'t authorized.'));
         }
 

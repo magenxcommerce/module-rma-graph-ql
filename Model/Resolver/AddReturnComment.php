@@ -71,7 +71,8 @@ class AddReturnComment implements ResolverInterface
      */
     public function resolve(Field $field, $context, ResolveInfo $info, ?array $value = null, ?array $args = null): array
     {
-        if ($context->getExtensionAttributes()->getIsCustomer() === false) {
+        // Fail closed: only a signed-in customer with an id passes (API PRD NFR-A2).
+        if ($context->getExtensionAttributes()->getIsCustomer() !== true || !(int)$context->getUserId()) {
             throw new GraphQlAuthorizationException(__('The current customer isn\'t authorized.'));
         }
 
