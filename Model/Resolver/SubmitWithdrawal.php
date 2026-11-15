@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Magenx\RmaGraphQl\Model\Resolver;
 
+use Magenx\RmaGraphQl\Model\Security\GuestRateLimiter;
 use Magenx\Rma\Service\WithdrawalRequest;
 use Magenx\Rma\Service\WithdrawalSubmitService;
 use Magento\Framework\Exception\LocalizedException;
@@ -32,9 +33,11 @@ class SubmitWithdrawal implements ResolverInterface
 
     /**
      * @param WithdrawalSubmitService $withdrawalSubmitService
+     * @param GuestRateLimiter $guestRateLimiter
      */
     public function __construct(
-        protected readonly WithdrawalSubmitService $withdrawalSubmitService
+        protected readonly WithdrawalSubmitService $withdrawalSubmitService,
+        protected readonly GuestRateLimiter $guestRateLimiter
     ) {
     }
 
@@ -68,6 +71,8 @@ class SubmitWithdrawal implements ResolverInterface
         if (mb_strlen($items) > self::MAX_TEXT || mb_strlen($message) > self::MAX_TEXT) {
             throw new GraphQlInputException(__('The text can be at most %1 characters long.', self::MAX_TEXT));
         }
+
+        $this->guestRateLimiter->assertAllowed('withdrawal', $email);
 
         $extension = $context->getExtensionAttributes();
         $customerId = $extension?->getIsCustomer() ? (int)$context->getUserId() : null;

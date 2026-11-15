@@ -6,6 +6,8 @@
  *
  * Forked from mage-os/module-rma 2.4.1 into Magenx_Rma / Magenx_RmaGraphQl;
  * identifiers renamed, GraphQL surface split into a sibling module.
+ * Modified by MagenX: answers "not available" while returns are off for the store;
+ * someone else's return or order answers like a missing one.
  */
 declare(strict_types=1);
 
@@ -29,9 +31,12 @@ trait CustomerRmaAccessTrait
      */
     protected function loadCustomerRma($context, int $rmaId): RMAInterface
     {
-        if ($context->getExtensionAttributes()->getIsCustomer() === false) {
+        // Fail closed: only a signed-in customer with an id passes (API PRD NFR-A2).
+        if ($context->getExtensionAttributes()->getIsCustomer() !== true || !(int)$context->getUserId()) {
             throw new GraphQlAuthorizationException(__('The current customer isn\'t authorized.'));
         }
+
+        $this->assertReturnsAvailable($context);
 
         if (!$rmaId) {
             throw new GraphQlInputException(__('RMA ID is required.'));
@@ -44,7 +49,8 @@ trait CustomerRmaAccessTrait
         }
 
         if ((int)$rma->getCustomerId() !== (int)$context->getUserId()) {
-            throw new GraphQlAuthorizationException(__('You are not authorized to view this return.'));
+            // Someone else's return answers exactly like a missing one (API PRD BR-3).
+            throw new GraphQlNoSuchEntityException(__('RMA with ID "%1" does not exist.', $rmaId));
         }
 
         return $rma;

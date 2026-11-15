@@ -6,15 +6,62 @@
  *
  * Forked from mage-os/module-rma 2.4.1 into Magenx_Rma / Magenx_RmaGraphQl;
  * identifiers renamed, GraphQL surface split into a sibling module.
+ * Modified by MagenX: ineligible orders are refused with their specific reason; storage
+ * errors are not shown to the client.
  */
 declare(strict_types=1);
 
 namespace Magenx\RmaGraphQl\Model\Resolver;
 
+use Magenx\Rma\Service\OrderEligibility;
+use Magento\Framework\Exception\CouldNotSaveException;
+use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\GraphQl\Exception\GraphQlInputException;
+use Magento\Sales\Api\Data\OrderInterface;
+use RuntimeException;
 
 trait ReturnInputTrait
 {
+    /**
+     * Refuses an ineligible order with its specific reason (API PRD FR-V2), so the
+     * storefront can tell the customer why instead of a generic refusal.
+     *
+     * @param OrderEligibility $orderEligibility
+     * @param OrderInterface $order
+     * @return void
+     * @throws GraphQlInputException
+     */
+    protected function assertOrderEligible(OrderEligibility $orderEligibility, OrderInterface $order): void
+    {
+        $verdict = $orderEligibility->explain($order);
+
+        if ($verdict !== OrderEligibility::RESULT_OK) {
+            throw new GraphQlInputException($orderEligibility->describe($verdict));
+        }
+    }
+
+    /**
+     * Runs a back-office write and maps its errors for the client. Business refusals
+     * (LocalizedException) keep their message. A storage failure (CouldNotSaveException
+     * wraps the database error text) becomes an internal error: GraphQL logs it and the
+     * client sees no schema or SQL.
+     *
+     * @param callable $write
+     * @return mixed
+     * @throws GraphQlInputException
+     * @throws RuntimeException
+     */
+    protected function runWrite(callable $write): mixed
+    {
+        try {
+            return $write();
+        } catch (CouldNotSaveException $e) {
+            throw new RuntimeException('Could not save the return data.', 0, $e);
+        } catch (LocalizedException $e) {
+            throw new GraphQlInputException(__($e->getMessage()));
+        }
+    }
+
     /**
      * @param array $input
      * @param array $requiredFields

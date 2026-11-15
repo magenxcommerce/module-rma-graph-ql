@@ -6,11 +6,15 @@
  *
  * Forked from mage-os/module-rma 2.4.1 into Magenx_Rma / Magenx_RmaGraphQl;
  * identifiers renamed, GraphQL surface split into a sibling module.
+ * Modified by MagenX: answers "not available" while returns are off for the store;
+ * someone else's return or order answers like a missing one; guest proof is rate-limited.
  */
 declare(strict_types=1);
 
 namespace Magenx\RmaGraphQl\Model\Resolver;
 
+use Magenx\RmaGraphQl\Model\Security\GuestRateLimiter;
+use Magenx\Rma\Helper\ModuleConfig;
 use Magenx\Rma\Api\RMARepositoryInterface;
 use Magenx\RmaGraphQl\Model\Resolver\DataProvider\ReturnDataProvider;
 use Magento\Framework\Api\SearchCriteriaBuilder;
@@ -25,6 +29,7 @@ use Magento\Sales\Api\OrderRepositoryInterface;
 
 class GuestReturn implements ResolverInterface
 {
+    use ReturnsAvailabilityTrait;
     use GuestOrderLookupTrait;
     use ReturnQueryTrait;
 
@@ -33,12 +38,16 @@ class GuestReturn implements ResolverInterface
      * @param OrderRepositoryInterface $orderRepository
      * @param SearchCriteriaBuilder $searchCriteriaBuilder
      * @param ReturnDataProvider $returnDataProvider
+     * @param ModuleConfig $moduleConfig
+     * @param GuestRateLimiter $guestRateLimiter
      */
     public function __construct(
         protected readonly RMARepositoryInterface $rmaRepository,
         protected readonly OrderRepositoryInterface $orderRepository,
         protected readonly SearchCriteriaBuilder $searchCriteriaBuilder,
-        protected readonly ReturnDataProvider $returnDataProvider
+        protected readonly ReturnDataProvider $returnDataProvider,
+        protected readonly ModuleConfig $moduleConfig,
+        protected readonly GuestRateLimiter $guestRateLimiter
     ) {
     }
 
@@ -63,6 +72,8 @@ class GuestReturn implements ResolverInterface
             throw new GraphQlInputException(__('Order number, email and RMA ID are required.'));
         }
 
+        $this->assertReturnsAvailable($context);
+
         $order = $this->findGuestOrder($orderNumber, $email, $this->resolveStoreId($context));
 
         try {
@@ -72,7 +83,8 @@ class GuestReturn implements ResolverInterface
         }
 
         if ((int)$rma->getOrderId() !== (int)$order->getEntityId()) {
-            throw new GraphQlAuthorizationException(__('You are not authorized to view this return.'));
+            // A return of another order answers exactly like a missing one (API PRD BR-3).
+            throw new GraphQlNoSuchEntityException(__('RMA with ID "%1" does not exist.', $rmaId));
         }
 
         return $this->returnDataProvider->formatRma($rma, $this->selectedReturnFields($info));

@@ -6,6 +6,9 @@
  *
  * Forked from mage-os/module-rma 2.4.1 into Magenx_Rma / Magenx_RmaGraphQl;
  * identifiers renamed, GraphQL surface split into a sibling module.
+ * Modified by MagenX: an ineligible order is refused with its specific reason; storage
+ * errors are not shown to the client;
+ * someone else's return or order answers like a missing one.
  */
 declare(strict_types=1);
 
@@ -14,7 +17,6 @@ namespace Magenx\RmaGraphQl\Model\Resolver;
 use Magenx\RmaGraphQl\Model\Resolver\DataProvider\ReturnDataProvider;
 use Magenx\Rma\Service\OrderEligibility;
 use Magenx\Rma\Service\RmaSubmitService;
-use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Exception\NoSuchEntityException;
 use Magento\Framework\GraphQl\Config\Element\Field;
 use Magento\Framework\GraphQl\Query\ResolverInterface;
@@ -57,7 +59,8 @@ class CreateCustomerReturn implements ResolverInterface
      */
     public function resolve(Field $field, $context, ResolveInfo $info, ?array $value = null, ?array $args = null): array
     {
-        if ($context->getExtensionAttributes()->getIsCustomer() === false) {
+        // Fail closed: only a signed-in customer with an id passes (API PRD NFR-A2).
+        if ($context->getExtensionAttributes()->getIsCustomer() !== true || !(int)$context->getUserId()) {
             throw new GraphQlAuthorizationException(__('The current customer isn\'t authorized.'));
         }
 
@@ -79,28 +82,23 @@ class CreateCustomerReturn implements ResolverInterface
         }
 
         if ((int)$order->getCustomerId() !== $customerId) {
-            throw new GraphQlAuthorizationException(__('You are not authorized to create a return for this order.'));
+            // Someone else's order answers exactly like a missing one (API PRD BR-3, BR-31).
+            throw new GraphQlNoSuchEntityException(__('Order with ID "%1" does not exist.', $orderId));
         }
 
-        if (!$this->orderEligibility->isOrderEligible($order)) {
-            throw new GraphQlInputException(__('This order is not eligible for a return.'));
-        }
+        $this->assertOrderEligible($this->orderEligibility, $order);
 
         $selectedItems = $this->buildSelectedItems($input['items']);
 
-        try {
-            $rma = $this->rmaSubmitService->createRma(
-                $order,
-                $customerId,
-                (string)$order->getCustomerEmail(),
-                (string)($order->getCustomerName() ?: 'Customer'),
-                (int)$input['reason_id'],
-                (int)$input['resolution_type_id'],
-                $selectedItems
-            );
-        } catch (LocalizedException $e) {
-            throw new GraphQlInputException(__($e->getMessage()));
-        }
+        $rma = $this->runWrite(fn() => $this->rmaSubmitService->createRma(
+            $order,
+            $customerId,
+            (string)$order->getCustomerEmail(),
+            (string)($order->getCustomerName() ?: 'Customer'),
+            (int)$input['reason_id'],
+            (int)$input['resolution_type_id'],
+            $selectedItems
+        ));
 
         return ['return' => $this->returnDataProvider->formatRma($rma, $this->selectedReturnFields($info, 'return'))];
     }

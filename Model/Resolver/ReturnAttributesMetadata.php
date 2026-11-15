@@ -10,9 +10,11 @@ declare(strict_types=1);
 
 namespace Magenx\RmaGraphQl\Model\Resolver;
 
+use Magenx\Rma\Helper\ModuleConfig;
 use Magenx\Rma\Api\ItemConditionRepositoryInterface;
 use Magenx\Rma\Api\ReasonRepositoryInterface;
 use Magenx\Rma\Api\ResolutionTypeRepositoryInterface;
+use Magenx\Rma\Model\RMA\WithdrawalCodes;
 use Magento\Framework\Api\SearchCriteriaBuilder;
 use Magento\Framework\Api\SearchCriteriaInterface;
 use Magento\Framework\GraphQl\Config\Element\Field;
@@ -32,17 +34,21 @@ use Magento\GraphQl\Model\Query\ContextInterface;
  */
 class ReturnAttributesMetadata implements ResolverInterface
 {
+    use ReturnsAvailabilityTrait;
+
     /**
      * @param ReasonRepositoryInterface $reasonRepository
      * @param ResolutionTypeRepositoryInterface $resolutionTypeRepository
      * @param ItemConditionRepositoryInterface $itemConditionRepository
      * @param SearchCriteriaBuilder $searchCriteriaBuilder
+     * @param ModuleConfig $moduleConfig
      */
     public function __construct(
         protected readonly ReasonRepositoryInterface $reasonRepository,
         protected readonly ResolutionTypeRepositoryInterface $resolutionTypeRepository,
         protected readonly ItemConditionRepositoryInterface $itemConditionRepository,
-        protected readonly SearchCriteriaBuilder $searchCriteriaBuilder
+        protected readonly SearchCriteriaBuilder $searchCriteriaBuilder,
+        protected readonly ModuleConfig $moduleConfig
     ) {
     }
 
@@ -56,11 +62,19 @@ class ReturnAttributesMetadata implements ResolverInterface
      */
     public function resolve(Field $field, $context, ResolveInfo $info, ?array $value = null, ?array $args = null): array
     {
+        // Returns off for this store: nothing to offer (API PRD FR-C2).
+        if (!$this->areReturnsAvailable($context)) {
+            return ['reasons' => [], 'resolution_types' => [], 'conditions' => []];
+        }
+
         $storeId = (int)$context->getExtensionAttributes()->getStore()->getId();
 
         return [
             'reasons' => $this->format(
-                $this->reasonRepository->getList($this->activeCriteria())->getItems(),
+                // The withdrawal reason is set by the system, never offered (API PRD FR-M2).
+                $this->reasonRepository->getList(
+                    $this->activeCriteria(['code' => WithdrawalCodes::REASON])
+                )->getItems(),
                 $storeId
             ),
             'resolution_types' => $this->format(
@@ -78,13 +92,17 @@ class ReturnAttributesMetadata implements ResolverInterface
      * Build a fresh "is_active = 1" search criteria. SearchCriteriaBuilder
      * resets on create(), so a new one is required per repository call.
      *
+     * @param array<string, string> $exclude field => value to leave out
      * @return SearchCriteriaInterface
      */
-    protected function activeCriteria(): SearchCriteriaInterface
+    protected function activeCriteria(array $exclude = []): SearchCriteriaInterface
     {
-        return $this->searchCriteriaBuilder
-            ->addFilter('is_active', 1)
-            ->create();
+        $this->searchCriteriaBuilder->addFilter('is_active', 1);
+        foreach ($exclude as $field => $value) {
+            $this->searchCriteriaBuilder->addFilter($field, $value, 'neq');
+        }
+
+        return $this->searchCriteriaBuilder->create();
     }
 
     /**

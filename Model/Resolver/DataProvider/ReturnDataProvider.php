@@ -9,6 +9,8 @@
  * Modified by MagenX: added batch formatting and field-selection awareness so a list
  * of returns costs a fixed number of queries instead of three per row.
  * Modified by MagenX: exposes the withdrawal and return-shipment fields.
+ * Modified by MagenX: order numbers and item names come from two plain selects instead
+ * of repository-loaded orders.
  */
 declare(strict_types=1);
 
@@ -20,29 +22,22 @@ use Magenx\Rma\Api\Data\RMAInterface;
 use Magenx\Rma\Api\ItemRepositoryInterface;
 use Magenx\Rma\Service\LabelResolver;
 use Magento\Framework\Api\SearchCriteriaBuilder;
-use Magento\Sales\Api\Data\OrderInterface;
-use Magento\Sales\Api\OrderRepositoryInterface;
-use Magento\Framework\Exception\NoSuchEntityException;
+use Magento\Framework\App\ResourceConnection;
 
 class ReturnDataProvider
 {
     /**
-     * Field names on CustomerReturn whose resolution needs the order loaded.
-     */
-    private const ORDER_BACKED_FIELDS = ['order_number', 'items'];
-
-    /**
      * @param LabelResolver $labelResolver
      * @param ItemRepositoryInterface $itemRepository
      * @param CommentRepositoryInterface $commentRepository
-     * @param OrderRepositoryInterface $orderRepository
+     * @param ResourceConnection $resourceConnection
      * @param SearchCriteriaBuilder $searchCriteriaBuilder
      */
     public function __construct(
         protected readonly LabelResolver $labelResolver,
         protected readonly ItemRepositoryInterface $itemRepository,
         protected readonly CommentRepositoryInterface $commentRepository,
-        protected readonly OrderRepositoryInterface $orderRepository,
+        protected readonly ResourceConnection $resourceConnection,
         protected readonly SearchCriteriaBuilder $searchCriteriaBuilder
     ) {
     }
@@ -83,33 +78,41 @@ class ReturnDataProvider
 
         $rmaIds = array_map(static fn(RMAInterface $rma): int => (int)$rma->getEntityId(), $rmas);
 
-        $needsOrder = $this->isSelected($selectedFields, self::ORDER_BACKED_FIELDS);
+        $needsOrderNumber = $this->isSelected($selectedFields, ['order_number']);
         $needsItems = $this->isSelected($selectedFields, ['items']);
         $needsComments = $this->isSelected($selectedFields, ['comments']);
+        $needsStatus = $this->isSelected($selectedFields, ['status']);
+        $needsReason = $this->isSelected($selectedFields, ['reason']);
+        $needsResolution = $this->isSelected($selectedFields, ['resolution_type']);
 
-        $orders = $needsOrder ? $this->loadOrders($rmas) : [];
+        $orderNumbers = $needsOrderNumber ? $this->loadOrderNumbers($rmas) : [];
         $itemsByRma = $needsItems ? $this->loadItemsByRma($rmaIds) : [];
+        $orderItems = $needsItems ? $this->loadOrderItems($itemsByRma) : [];
         $commentsByRma = $needsComments ? $this->loadVisibleCommentsByRma($rmaIds) : [];
 
         $formatted = [];
 
         foreach ($rmas as $rma) {
             $rmaId = (int)$rma->getEntityId();
-            $order = $orders[(int)$rma->getOrderId()] ?? null;
-            $orderItemsMap = $order !== null ? $this->buildOrderItemsMap($order) : [];
 
             $formatted[] = [
                 'rma_id' => $rma->getEntityId(),
                 'increment_id' => $rma->getIncrementId(),
-                'order_number' => $order?->getIncrementId(),
-                'status' => $this->labelResolver->resolveAsArray(LabelResolver::TYPE_STATUS, $rma->getStatusId()),
-                'reason' => $this->labelResolver->resolveAsArray(LabelResolver::TYPE_REASON, $rma->getReasonId()),
-                'resolution_type' => $this->labelResolver->resolveAsArray(
-                    LabelResolver::TYPE_RESOLUTION_TYPE,
-                    $rma->getResolutionTypeId()
-                ),
+                'order_number' => $orderNumbers[(int)$rma->getOrderId()] ?? null,
+                'status' => $needsStatus
+                    ? $this->labelResolver->resolveAsArray(LabelResolver::TYPE_STATUS, $rma->getStatusId())
+                    : null,
+                'reason' => $needsReason
+                    ? $this->labelResolver->resolveAsArray(LabelResolver::TYPE_REASON, $rma->getReasonId())
+                    : null,
+                'resolution_type' => $needsResolution
+                    ? $this->labelResolver->resolveAsArray(
+                        LabelResolver::TYPE_RESOLUTION_TYPE,
+                        $rma->getResolutionTypeId()
+                    )
+                    : null,
                 'items' => array_map(
-                    fn($item): array => $this->buildItemData($item, $orderItemsMap),
+                    fn($item): array => $this->buildItemData($item, $orderItems),
                     $itemsByRma[$rmaId] ?? []
                 ),
                 'comments' => $commentsByRma[$rmaId] ?? [],
@@ -144,15 +147,16 @@ class ReturnDataProvider
     }
 
     /**
-     * Load every order referenced by the page, keyed by order id.
+     * Order numbers of the page, keyed by order id, from one query.
      *
-     * OrderRepository has no batch getById, so this goes through getList with an `in`
-     * filter — one query for the page instead of one per row.
+     * Only the increment id is shown, so this reads that column instead of loading
+     * orders through the repository, which hydrates shipping, tax and payment data
+     * for each one.
      *
      * @param RMAInterface[] $rmas
-     * @return array<int, OrderInterface>
+     * @return array<int, string>
      */
-    protected function loadOrders(array $rmas): array
+    protected function loadOrderNumbers(array $rmas): array
     {
         $orderIds = array_values(array_unique(array_filter(
             array_map(static fn(RMAInterface $rma): int => (int)$rma->getOrderId(), $rmas)
@@ -162,21 +166,45 @@ class ReturnDataProvider
             return [];
         }
 
-        $searchCriteria = $this->searchCriteriaBuilder
-            ->addFilter('entity_id', $orderIds, 'in')
-            ->create();
+        $connection = $this->resourceConnection->getConnection();
+        $select = $connection->select()
+            ->from($this->resourceConnection->getTableName('sales_order'), ['entity_id', 'increment_id'])
+            ->where('entity_id IN (?)', $orderIds);
 
-        $orders = [];
+        return array_map('strval', $connection->fetchPairs($select));
+    }
 
-        try {
-            foreach ($this->orderRepository->getList($searchCriteria)->getItems() as $order) {
-                $orders[(int)$order->getEntityId()] = $order;
+    /**
+     * Name and SKU of every order line the page's return items point at, from one query.
+     *
+     * @param array<int, array> $itemsByRma
+     * @return array<int, array{name: string|null, sku: string|null}> keyed by order item id
+     */
+    protected function loadOrderItems(array $itemsByRma): array
+    {
+        $orderItemIds = [];
+        foreach ($itemsByRma as $items) {
+            foreach ($items as $item) {
+                $orderItemIds[] = (int)$item->getOrderItemId();
             }
-        } catch (NoSuchEntityException) {
+        }
+        $orderItemIds = array_values(array_unique(array_filter($orderItemIds)));
+
+        if (empty($orderItemIds)) {
             return [];
         }
 
-        return $orders;
+        $connection = $this->resourceConnection->getConnection();
+        $select = $connection->select()
+            ->from($this->resourceConnection->getTableName('sales_order_item'), ['item_id', 'name', 'sku'])
+            ->where('item_id IN (?)', $orderItemIds);
+
+        $rows = [];
+        foreach ($connection->fetchAll($select) as $row) {
+            $rows[(int)$row['item_id']] = ['name' => $row['name'], 'sku' => $row['sku']];
+        }
+
+        return $rows;
     }
 
     /**
@@ -234,33 +262,19 @@ class ReturnDataProvider
     }
 
     /**
-     * @param OrderInterface $order
-     * @return array
-     */
-    protected function buildOrderItemsMap(OrderInterface $order): array
-    {
-        $map = [];
-        foreach ($order->getItems() as $orderItem) {
-            $map[(int)$orderItem->getItemId()] = $orderItem;
-        }
-
-        return $map;
-    }
-
-    /**
      * @param object $item
-     * @param array $orderItemsMap
+     * @param array<int, array{name: string|null, sku: string|null}> $orderItems
      * @return array
      */
-    protected function buildItemData(object $item, array $orderItemsMap): array
+    protected function buildItemData(object $item, array $orderItems): array
     {
-        $orderItem = $orderItemsMap[(int) $item->getOrderItemId()] ?? null;
+        $orderItem = $orderItems[(int) $item->getOrderItemId()] ?? null;
 
         return [
             'item_id' => $item->getEntityId(),
             'order_item_id' => $item->getOrderItemId(),
-            'product_name' => $orderItem?->getName(),
-            'product_sku' => $orderItem?->getSku(),
+            'product_name' => $orderItem['name'] ?? null,
+            'product_sku' => $orderItem['sku'] ?? null,
             'qty_requested' => $item->getQtyRequested(),
             'qty_approved' => $item->getQtyApproved(),
             'qty_returned' => $item->getQtyReturned(),

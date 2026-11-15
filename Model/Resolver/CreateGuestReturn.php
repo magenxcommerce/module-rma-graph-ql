@@ -6,16 +6,18 @@
  *
  * Forked from mage-os/module-rma 2.4.1 into Magenx_Rma / Magenx_RmaGraphQl;
  * identifiers renamed, GraphQL surface split into a sibling module.
+ * Modified by MagenX: an ineligible order is refused with its specific reason; storage
+ * errors are not shown to the client; guest proof is rate-limited.
  */
 declare(strict_types=1);
 
 namespace Magenx\RmaGraphQl\Model\Resolver;
 
+use Magenx\RmaGraphQl\Model\Security\GuestRateLimiter;
 use Magenx\RmaGraphQl\Model\Resolver\DataProvider\ReturnDataProvider;
 use Magenx\Rma\Service\OrderEligibility;
 use Magenx\Rma\Service\RmaSubmitService;
 use Magento\Framework\Api\SearchCriteriaBuilder;
-use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\GraphQl\Config\Element\Field;
 use Magento\Framework\GraphQl\Query\ResolverInterface;
 use Magento\Framework\GraphQl\Schema\Type\ResolveInfo;
@@ -36,13 +38,15 @@ class CreateGuestReturn implements ResolverInterface
      * @param OrderEligibility $orderEligibility
      * @param RmaSubmitService $rmaSubmitService
      * @param ReturnDataProvider $returnDataProvider
+     * @param GuestRateLimiter $guestRateLimiter
      */
     public function __construct(
         protected readonly OrderRepositoryInterface $orderRepository,
         protected readonly SearchCriteriaBuilder $searchCriteriaBuilder,
         protected readonly OrderEligibility $orderEligibility,
         protected readonly RmaSubmitService $rmaSubmitService,
-        protected readonly ReturnDataProvider $returnDataProvider
+        protected readonly ReturnDataProvider $returnDataProvider,
+        protected readonly GuestRateLimiter $guestRateLimiter
     ) {
     }
 
@@ -70,25 +74,19 @@ class CreateGuestReturn implements ResolverInterface
 
         $order = $this->findGuestOrder($input['order_number'], $input['email'], $this->resolveStoreId($context));
 
-        if (!$this->orderEligibility->isOrderEligible($order)) {
-            throw new GraphQlInputException(__('This order is not eligible for a return.'));
-        }
+        $this->assertOrderEligible($this->orderEligibility, $order);
 
         $selectedItems = $this->buildSelectedItems($input['items']);
 
-        try {
-            $rma = $this->rmaSubmitService->createRma(
-                $order,
-                null,
-                (string)$order->getCustomerEmail(),
-                (string)($order->getBillingAddress()?->getName() ?: 'Guest'),
-                (int)$input['reason_id'],
-                (int)$input['resolution_type_id'],
-                $selectedItems
-            );
-        } catch (LocalizedException $e) {
-            throw new GraphQlInputException(__($e->getMessage()));
-        }
+        $rma = $this->runWrite(fn() => $this->rmaSubmitService->createRma(
+            $order,
+            null,
+            (string)$order->getCustomerEmail(),
+            (string)($order->getBillingAddress()?->getName() ?: 'Guest'),
+            (int)$input['reason_id'],
+            (int)$input['resolution_type_id'],
+            $selectedItems
+        ));
 
         return ['return' => $this->returnDataProvider->formatRma($rma, $this->selectedReturnFields($info, 'return'))];
     }

@@ -21,6 +21,9 @@
             <module name="Magento_GraphQl"/>
             <module name="Magento_Sales"/>
             <module name="Magento_Customer"/>
+            <!-- The resolvers read the is_customer and store context attributes these two add. -->
+            <module name="Magento_CustomerGraphQl"/>
+            <module name="Magento_StoreGraphQl"/>
         </sequence>
     </module>
 </config>

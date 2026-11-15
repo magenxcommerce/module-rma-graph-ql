@@ -6,12 +6,14 @@
  *
  * Forked from mage-os/module-rma 2.4.1 into Magenx_Rma / Magenx_RmaGraphQl;
  * identifiers renamed, GraphQL surface split into a sibling module.
- * Modified by MagenX: added the `sort` argument (CustomerReturnsSortInput), defaulting to created_at DESC.
+ * Modified by MagenX: added the `sort` argument (CustomerReturnsSortInput), defaulting to created_at DESC;
+ * answers "not available" while returns are off for the store.
  */
 declare(strict_types=1);
 
 namespace Magenx\RmaGraphQl\Model\Resolver;
 
+use Magenx\Rma\Helper\ModuleConfig;
 use Magenx\Rma\Api\Data\RMAInterface;
 use Magenx\Rma\Api\RMARepositoryInterface;
 use Magenx\RmaGraphQl\Model\Resolver\DataProvider\ReturnDataProvider;
@@ -27,6 +29,7 @@ use Magento\Framework\Exception\NoSuchEntityException;
 
 class CustomerReturns implements ResolverInterface
 {
+    use ReturnsAvailabilityTrait;
     use ReturnQueryTrait;
 
     /**
@@ -34,12 +37,14 @@ class CustomerReturns implements ResolverInterface
      * @param SearchCriteriaBuilder $searchCriteriaBuilder
      * @param ReturnDataProvider $returnDataProvider
      * @param SortOrderBuilder $sortOrderBuilder
+     * @param ModuleConfig $moduleConfig
      */
     public function __construct(
         protected readonly RMARepositoryInterface $rmaRepository,
         protected readonly SearchCriteriaBuilder $searchCriteriaBuilder,
         protected readonly ReturnDataProvider $returnDataProvider,
-        protected readonly SortOrderBuilder $sortOrderBuilder
+        protected readonly SortOrderBuilder $sortOrderBuilder,
+        protected readonly ModuleConfig $moduleConfig
     ) {
     }
 
@@ -84,9 +89,12 @@ class CustomerReturns implements ResolverInterface
      */
     public function resolve(Field $field, $context, ResolveInfo $info, ?array $value = null, ?array $args = null): array
     {
-        if ($context->getExtensionAttributes()->getIsCustomer() === false) {
+        // Fail closed: only a signed-in customer with an id passes (API PRD NFR-A2).
+        if ($context->getExtensionAttributes()->getIsCustomer() !== true || !(int)$context->getUserId()) {
             throw new GraphQlAuthorizationException(__('The current customer isn\'t authorized.'));
         }
+
+        $this->assertReturnsAvailable($context);
 
         $customerId = (int)$context->getUserId();
         $pageSize = $this->clampPageSize($args['pageSize'] ?? null, 20);
