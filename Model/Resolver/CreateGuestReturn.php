@@ -6,6 +6,7 @@
  *
  * Forked from mage-os/module-rma 2.4.1 into Magenx_Rma / Magenx_RmaGraphQl;
  * identifiers renamed, GraphQL surface split into a sibling module.
+ * Modified by MagenX: an ineligible order is refused with its specific reason.
  */
 declare(strict_types=1);
 
@@ -70,9 +71,7 @@ class CreateGuestReturn implements ResolverInterface
 
         $order = $this->findGuestOrder($input['order_number'], $input['email'], $this->resolveStoreId($context));
 
-        if (!$this->orderEligibility->isOrderEligible($order)) {
-            throw new GraphQlInputException(__('This order is not eligible for a return.'));
-        }
+        $this->assertOrderEligible($this->orderEligibility, $order);
 
         $selectedItems = $this->buildSelectedItems($input['items']);
 
