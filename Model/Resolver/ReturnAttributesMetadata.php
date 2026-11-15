@@ -10,6 +10,7 @@ declare(strict_types=1);
 
 namespace Magenx\RmaGraphQl\Model\Resolver;
 
+use Magenx\Rma\Helper\ModuleConfig;
 use Magenx\Rma\Api\ItemConditionRepositoryInterface;
 use Magenx\Rma\Api\ReasonRepositoryInterface;
 use Magenx\Rma\Api\ResolutionTypeRepositoryInterface;
@@ -32,17 +33,20 @@ use Magento\GraphQl\Model\Query\ContextInterface;
  */
 class ReturnAttributesMetadata implements ResolverInterface
 {
+    use ReturnsAvailabilityTrait;
     /**
      * @param ReasonRepositoryInterface $reasonRepository
      * @param ResolutionTypeRepositoryInterface $resolutionTypeRepository
      * @param ItemConditionRepositoryInterface $itemConditionRepository
      * @param SearchCriteriaBuilder $searchCriteriaBuilder
+     * @param ModuleConfig $moduleConfig
      */
     public function __construct(
         protected readonly ReasonRepositoryInterface $reasonRepository,
         protected readonly ResolutionTypeRepositoryInterface $resolutionTypeRepository,
         protected readonly ItemConditionRepositoryInterface $itemConditionRepository,
-        protected readonly SearchCriteriaBuilder $searchCriteriaBuilder
+        protected readonly SearchCriteriaBuilder $searchCriteriaBuilder,
+        protected readonly ModuleConfig $moduleConfig
     ) {
     }
 
@@ -56,6 +60,11 @@ class ReturnAttributesMetadata implements ResolverInterface
      */
     public function resolve(Field $field, $context, ResolveInfo $info, ?array $value = null, ?array $args = null): array
     {
+        // Returns off for this store: nothing to offer (API PRD FR-C2).
+        if (!$this->areReturnsAvailable($context)) {
+            return ['reasons' => [], 'resolution_types' => [], 'conditions' => []];
+        }
+
         $storeId = (int)$context->getExtensionAttributes()->getStore()->getId();
 
         return [

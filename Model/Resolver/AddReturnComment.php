@@ -6,12 +6,14 @@
  *
  * Forked from mage-os/module-rma 2.4.1 into Magenx_Rma / Magenx_RmaGraphQl;
  * identifiers renamed, GraphQL surface split into a sibling module.
- * Modified by MagenX: storage errors are not shown to the client.
+ * Modified by MagenX: storage errors are not shown to the client;
+ * answers "not available" while returns are off for the store.
  */
 declare(strict_types=1);
 
 namespace Magenx\RmaGraphQl\Model\Resolver;
 
+use Magenx\Rma\Helper\ModuleConfig;
 use Magenx\Rma\Api\CommentRepositoryInterface;
 use Magenx\Rma\Api\Data\CommentInterface;
 use Magenx\Rma\Api\Data\CommentInterfaceFactory;
@@ -29,6 +31,7 @@ use Magento\GraphQl\Model\Query\ContextInterface;
 
 class AddReturnComment implements ResolverInterface
 {
+    use ReturnsAvailabilityTrait;
     use ReturnInputTrait;
 
     /**
@@ -36,12 +39,14 @@ class AddReturnComment implements ResolverInterface
      * @param CommentRepositoryInterface $commentRepository
      * @param CommentInterfaceFactory $commentFactory
      * @param CustomerRepositoryInterface $customerRepository
+     * @param ModuleConfig $moduleConfig
      */
     public function __construct(
         protected readonly RMARepositoryInterface $rmaRepository,
         protected readonly CommentRepositoryInterface $commentRepository,
         protected readonly CommentInterfaceFactory $commentFactory,
-        protected readonly CustomerRepositoryInterface $customerRepository
+        protected readonly CustomerRepositoryInterface $customerRepository,
+        protected readonly ModuleConfig $moduleConfig
     ) {
     }
 
@@ -61,6 +66,8 @@ class AddReturnComment implements ResolverInterface
         if ($context->getExtensionAttributes()->getIsCustomer() === false) {
             throw new GraphQlAuthorizationException(__('The current customer isn\'t authorized.'));
         }
+
+        $this->assertReturnsAvailable($context);
 
         $input = $args['input'] ?? [];
         $rmaId = (int)($input['rma_id'] ?? 0);
