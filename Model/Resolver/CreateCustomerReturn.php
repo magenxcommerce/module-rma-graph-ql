@@ -7,7 +7,8 @@
  * Forked from mage-os/module-rma 2.4.1 into Magenx_Rma / Magenx_RmaGraphQl;
  * identifiers renamed, GraphQL surface split into a sibling module.
  * Modified by MagenX: an ineligible order is refused with its specific reason; storage
- * errors are not shown to the client.
+ * errors are not shown to the client;
+ * someone else's return or order answers like a missing one.
  */
 declare(strict_types=1);
 
@@ -80,7 +81,8 @@ class CreateCustomerReturn implements ResolverInterface
         }
 
         if ((int)$order->getCustomerId() !== $customerId) {
-            throw new GraphQlAuthorizationException(__('You are not authorized to create a return for this order.'));
+            // Someone else's order answers exactly like a missing one (API PRD BR-3, BR-31).
+            throw new GraphQlNoSuchEntityException(__('Order with ID "%1" does not exist.', $orderId));
         }
 
         $this->assertOrderEligible($this->orderEligibility, $order);

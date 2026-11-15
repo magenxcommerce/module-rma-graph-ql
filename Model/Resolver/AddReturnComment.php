@@ -7,7 +7,8 @@
  * Forked from mage-os/module-rma 2.4.1 into Magenx_Rma / Magenx_RmaGraphQl;
  * identifiers renamed, GraphQL surface split into a sibling module.
  * Modified by MagenX: storage errors are not shown to the client;
- * answers "not available" while returns are off for the store.
+ * answers "not available" while returns are off for the store;
+ * someone else's return or order answers like a missing one.
  */
 declare(strict_types=1);
 
@@ -88,7 +89,8 @@ class AddReturnComment implements ResolverInterface
 
         $customerId = (int)$context->getUserId();
         if ((int)$rma->getCustomerId() !== $customerId) {
-            throw new GraphQlAuthorizationException(__('You are not authorized to comment on this return.'));
+            // Someone else's return answers exactly like a missing one (API PRD BR-3).
+            throw new GraphQlNoSuchEntityException(__('RMA with ID "%1" does not exist.', $rmaId));
         }
 
         $authorName = $this->getCustomerName($customerId);
