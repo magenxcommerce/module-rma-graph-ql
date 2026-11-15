@@ -76,13 +76,18 @@ Note the resolvers throw on error (there is no structured `errorV2` on the
 create/comment mutations), so callers handle failures with try/catch rather than
 a returned error field.
 
-## Known gap
+## Returns switch
 
-No resolver checks `rma/general/enabled` — upstream never did, while its Luma
-controllers do. The GraphQL surface is therefore live even when RMA is switched
-off in admin. Adding the gate would be correct but is a behaviour change: the
-config default is `0`, so it must not be enabled without first confirming the
-live value in the target store scope.
+Every customer and guest operation follows `rma/general/enabled` of the store the
+request arrives on (API PRD FR-C2): while it is off they answer *"Returns are not
+available for this store."* and `returnAttributesMetadata` answers empty lists.
+The config default is `0`, so **confirm the live value for the storefront's
+website is `1` before deploying** this version; earlier versions ignored the
+switch on reads and comments.
+
+This version also needs the `Magenx_Rma` release that adds
+`OrderEligibility::describe()`, `StatusCodes::FINAL_CODES` and
+`ChoiceListsCache`; deploy that first.
 
 ## GraphQL API
 
@@ -122,8 +127,10 @@ query {
 
 Lists the active reasons, resolution types and item conditions a customer or
 guest can choose from when creating a return, each ordered by its admin sort
-order and labelled for the current store view (`Store` header). No token
-required — guests create returns too.
+order and labelled for the current store view (`Store` header). The `withdrawal`
+reason is never offered. No token required — guests create returns too. The
+response is stored in the full page cache per store view; saving or deleting a
+reason, resolution or condition purges it.
 
 ```graphql
 query {
@@ -177,6 +184,24 @@ query {
         status { code label }
         items { product_name qty_requested }
     }
+}
+```
+
+#### customerReturnableItems / guestReturnableItems
+
+What the create-return form may offer for one order: whether it is eligible, the
+reason when it is not, and the units of each line that can still be returned
+(shipped, not refunded or canceled, not in an open return). Use these instead of
+computing quantities from the order.
+
+```graphql
+query {
+    customerReturnableItems(order_id: 100) {
+        eligible
+        reason
+        items { order_item_id product_name product_sku qty_available }
+    }
+    # guests: guestReturnableItems(order_number: "000000001", email: "guest@example.com") { ... }
 }
 ```
 
@@ -304,6 +329,18 @@ mutation {
 | `guestReturn`, `createGuestReturn` | No token — authenticated by `order_number` + `email` |
 | `returnAttributesMetadata` | No token — public store configuration |
 | `submitWithdrawal` | No token. Turnstile-protect it at the storefront proxy; a customer token, when sent, only helps link the order |
+| `customerReturnableItems` | Customer token — ownership of the order is verified |
+| `guestReturnableItems` | No token — authenticated by `order_number` + `email` |
+
+Someone else's return or order answers exactly like a missing one. Guest proof
+(`guestReturn`, `createGuestReturn`, `guestReturnableItems`) and `submitWithdrawal`
+are limited to 10 calls per minute per client address and per email; refusals
+are logged as counts, without the address or email. Customers can comment only
+on open returns (not rejected, canceled, resolved or refunded), at most 2000
+characters. An ineligible order is refused with the specific reason (returns
+off, order status, return period, nothing shipped, no returnable items).
+Storage errors are logged and answered as an internal error, never with
+database text.
 
 ### Types
 
